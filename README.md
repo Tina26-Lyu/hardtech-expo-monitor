@@ -117,12 +117,12 @@ git push -u origin main
 
 - GitHub 仓库 → Actions 页面 → 确认 workflow 已启用
 - 点击 "Run workflow" 可手动触发测试
-- 系统每天北京时间 08:00 自动运行
+- 系统每周一北京时间 09:00 自动运行
 
 ## 工作流程
 
 ```
-GitHub Actions 定时触发 (每天 08:00)
+GitHub Actions 定时触发 (每周一 09:00)
          │
          ▼
    多源数据抓取 (5个数据源)

@@ -10,7 +10,7 @@
 
 使用方式：
   本地运行:  python main.py
-  GitHub Actions: 每天北京时间 08:00 自动触发
+  GitHub Actions: 每周一北京时间 09:00 自动触发
 """
 
 import sys
