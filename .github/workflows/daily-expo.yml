@@ -1,9 +1,15 @@
 name: 每周硬科技展会监控
 
 on:
-  # 每周一北京时间 09:00 定时触发（UTC 01:00，周一）
+  # 每周一北京时间 09:00 定时触发
+  # GitHub Actions 免费版 cron 有延迟，设置多个触发时间确保至少一个能准时执行
+  # UTC 21:00 周日 = 北京时间 05:00 周一（提前触发，备用）
+  # UTC 01:00 周一 = 北京时间 09:00 周一（主触发时间）
+  # UTC 05:00 周一 = 北京时间 13:00 周一（兜底，确保当天一定执行）
   schedule:
+    - cron: '0 21 * * 0'
     - cron: '0 1 * * 1'
+    - cron: '0 5 * * 1'
   # 支持手动触发（用于测试）
   workflow_dispatch:
 
@@ -12,30 +18,64 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 0. 检查今天是否已有运行记录（避免重复推送）
+      - name: 检查是否重复运行
+        id: check_duplicate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TODAY=$(date '+%Y-%m-%d')
+          echo "今天日期: $TODAY"
+          # 查询今天已有的成功运行记录
+          RUNS=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/daily-expo.yml/runs?per_page=5" \
+            | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          today = '$TODAY'
+          count = 0
+          for run in data.get('workflow_runs', []):
+              if run.get('conclusion') == 'success' and run.get('created_at', '').startswith(today):
+                  count += 1
+          print(count)
+          ")
+          echo "今天已成功的运行次数: $RUNS"
+          if [ "$RUNS" -gt "0" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "今天已推送过，跳过本次运行"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       # 1. 检出代码
       - name: 检出仓库代码
+        if: steps.check_duplicate.outputs.skip != 'true'
         uses: actions/checkout@v4
 
       # 2. 设置 Python 环境
       - name: 设置 Python 3.11 环境
+        if: steps.check_duplicate.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       # 3. 安装依赖
       - name: 安装 Python 依赖
+        if: steps.check_duplicate.outputs.skip != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       # 4. 设置时区为北京时间
       - name: 设置时区
+        if: steps.check_duplicate.outputs.skip != 'true'
         run: |
           sudo timedatectl set-timezone Asia/Shanghai
           echo "当前时间: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 
       # 5. 执行主程序
       - name: 运行展会监控
+        if: steps.check_duplicate.outputs.skip != 'true'
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
@@ -46,7 +86,7 @@ jobs:
 
       # 6. 上传运行日志（便于排查）
       - name: 上传日志文件
-        if: always()
+        if: always() && steps.check_duplicate.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: expo-monitor-log
